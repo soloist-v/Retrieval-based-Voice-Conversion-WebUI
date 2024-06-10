@@ -5,17 +5,6 @@ echo downloading requirement aria2 check.
 echo=
 dir /a:d/b | findstr "aria2" > flag.txt
 findstr "aria2" flag.txt >nul
-if %errorlevel% ==0 (
-    echo aria2 checked.
-    echo=
-) else (
-    echo failed. please downloading aria2 from webpage!
-    echo unzip it and put in this directory!
-    timeout /T 5
-    start https://github.com/aria2/aria2/releases/tag/release-1.36.0
-    echo=
-    goto end
-)
 
 echo envfiles checking start.
 echo=

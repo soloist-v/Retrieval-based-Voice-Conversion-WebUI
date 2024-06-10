@@ -1,5 +1,6 @@
 import math
 import logging
+import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -618,6 +619,7 @@ class SynthesizerTrnMsNSFsidM(nn.Module):
         super(SynthesizerTrnMsNSFsidM, self).__init__()
         if isinstance(sr, str):
             sr = sr2sr[sr]
+        self.hop_size = kwargs.get("kwargs", 512)
         self.spec_channels = spec_channels
         self.inter_channels = inter_channels
         self.hidden_channels = hidden_channels
@@ -704,6 +706,15 @@ class SynthesizerTrnMsNSFsidM(nn.Module):
         z_p = (m_p + torch.exp(logs_p) * rnd) * x_mask
         z = self.flow(z_p, x_mask, g=g, reverse=True)
         o = self.dec((z * x_mask)[:, :, :max_len], nsff0, g=g)
+        # **********************
+        if os.environ.get("export_onnx", False) == "True":
+            print("***************** export onnx *****************")
+            o = (o * 32767.).to(torch.int16) # .squeeze()
+            # print(o.shape)
+            # o = o.squeeze()
+            # print(o.shape)
+            # o = F.pad(out_wav, (0, 2 * self.hop_size), "constant", 0)
+        # **********************
         return o
 
 

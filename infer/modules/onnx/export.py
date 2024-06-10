@@ -1,4 +1,5 @@
 import torch
+import yaml
 
 from infer.lib.infer_pack.models_onnx import SynthesizerTrnMsNSFsidM
 
@@ -48,5 +49,6 @@ def export_onnx(ModelPath, ExportedPath):
         verbose=False,
         input_names=input_names,
         output_names=output_names,
+        autograd_inlining=False,
     )
     return "Finished"

@@ -37,13 +37,13 @@ class ContentVec:
 
 def get_f0_predictor(f0_predictor, hop_length, sampling_rate, **kargs):
     if f0_predictor == "pm":
-        from lib.infer_pack.modules.F0Predictor.PMF0Predictor import PMF0Predictor
+        from infer.lib.infer_pack.F0Predictor.PMF0Predictor import PMF0Predictor
 
         f0_predictor_object = PMF0Predictor(
             hop_length=hop_length, sampling_rate=sampling_rate
         )
     elif f0_predictor == "harvest":
-        from lib.infer_pack.modules.F0Predictor.HarvestF0Predictor import (
+        from infer.lib.infer_pack.F0Predictor.HarvestF0Predictor import (
             HarvestF0Predictor,
         )
 
@@ -51,7 +51,7 @@ def get_f0_predictor(f0_predictor, hop_length, sampling_rate, **kargs):
             hop_length=hop_length, sampling_rate=sampling_rate
         )
     elif f0_predictor == "dio":
-        from lib.infer_pack.modules.F0Predictor.DioF0Predictor import DioF0Predictor
+        from infer.lib.infer_pack.F0Predictor.DioF0Predictor import DioF0Predictor
 
         f0_predictor_object = DioF0Predictor(
             hop_length=hop_length, sampling_rate=sampling_rate
@@ -63,14 +63,13 @@ def get_f0_predictor(f0_predictor, hop_length, sampling_rate, **kargs):
 
 class OnnxRVC:
     def __init__(
-        self,
-        model_path,
-        sr=40000,
-        hop_size=512,
-        vec_path="vec-768-layer-12",
-        device="cpu",
+            self,
+            model_path,
+            sr=40000,
+            hop_size=512,
+            vec_path="vec-768-layer-12",
+            device="cpu",
     ):
-        vec_path = f"pretrained/{vec_path}.onnx"
         self.vec_model = ContentVec(vec_path, device)
         if device == "cpu" or device is None:
             providers = ["CPUExecutionProvider"]
@@ -93,16 +92,17 @@ class OnnxRVC:
             self.model.get_inputs()[4].name: ds,
             self.model.get_inputs()[5].name: rnd,
         }
-        return (self.model.run(None, onnx_input)[0] * 32767).astype(np.int16)
+        # return (self.model.run(None, onnx_input)[0] * 32767).astype(np.int16)
+        return self.model.run(None, onnx_input)[0]
 
     def inference(
-        self,
-        raw_path,
-        sid,
-        f0_method="dio",
-        f0_up_key=0,
-        pad_time=0.5,
-        cr_threshold=0.02,
+            self,
+            raw_path,
+            sid,
+            f0_method="dio",
+            f0_up_key=0,
+            pad_time=0.5,
+            cr_threshold=0.02,
     ):
         f0_min = 50
         f0_max = 1100
@@ -114,13 +114,16 @@ class OnnxRVC:
             sampling_rate=self.sampling_rate,
             threshold=cr_threshold,
         )
-        wav, sr = librosa.load(raw_path, sr=self.sampling_rate)
+        sampling_rate = 40000
+        wav, sr = librosa.load(raw_path, sr=sampling_rate)
         org_length = len(wav)
         if org_length / sr > 50.0:
             raise RuntimeError("Reached Max Length")
 
-        wav16k = librosa.resample(wav, orig_sr=self.sampling_rate, target_sr=16000)
+        wav16k = librosa.resample(wav, orig_sr=sampling_rate, target_sr=16000)
         wav16k = wav16k
+        print("wav16k len: ", len(wav), len(wav16k), wav16k.dtype)
+        np.save("assets/wav16k.npy", wav16k)
 
         hubert = self.vec_model(wav16k)
         hubert = np.repeat(hubert, 2, axis=2).transpose(0, 2, 1).astype(np.float32)
@@ -131,7 +134,7 @@ class OnnxRVC:
         pitch = pitchf.copy()
         f0_mel = 1127 * np.log(1 + pitch / 700)
         f0_mel[f0_mel > 0] = (f0_mel[f0_mel > 0] - f0_mel_min) * 254 / (
-            f0_mel_max - f0_mel_min
+                f0_mel_max - f0_mel_min
         ) + 1
         f0_mel[f0_mel <= 1] = 1
         f0_mel[f0_mel > 255] = 255
@@ -144,6 +147,7 @@ class OnnxRVC:
         rnd = np.random.randn(1, 192, hubert_length).astype(np.float32)
         hubert_length = np.array([hubert_length]).astype(np.int64)
 
-        out_wav = self.forward(hubert, hubert_length, pitch, pitchf, ds, rnd).squeeze()
+        # out_wav = self.forward(hubert, hubert_length, pitch, pitchf, ds, rnd).squeeze()
+        out_wav = self.forward(hubert, hubert_length, pitch, pitchf, ds, rnd)
         out_wav = np.pad(out_wav, (0, 2 * self.hop_size), "constant")
         return out_wav[0:org_length]
