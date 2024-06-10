@@ -709,7 +709,7 @@ class SynthesizerTrnMsNSFsidM(nn.Module):
         # **********************
         if os.environ.get("export_onnx", False) == "True":
             print("***************** export onnx *****************")
-            o = (o * 32767.).to(torch.int16) # .squeeze()
+            o = (o * 32767.0).to(torch.int16)  # .squeeze()
             # print(o.shape)
             # o = o.squeeze()
             # print(o.shape)
