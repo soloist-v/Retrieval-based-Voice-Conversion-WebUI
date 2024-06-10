@@ -22,14 +22,15 @@ def load_hubert(model_path: str, device, is_half):
 
 
 class VC:
-    def __init__(self,
-                 config,
-                 rmvpe_path: str,
-                 model_path: str,
-                 hubert_path: str,
-                 to_return_protect0,
-                 to_return_protect1,
-                 ):
+    def __init__(
+        self,
+        config,
+        rmvpe_path: str,
+        model_path: str,
+        hubert_path: str,
+        to_return_protect0,
+        to_return_protect1,
+    ):
         self.rmvpe_weights = rmvpe_path
         self.n_spk = None
         self.tgt_sr = None
@@ -43,7 +44,9 @@ class VC:
         self.tgt_sr = self.cpt["config"][-1]
         print("target_sr:>>", self.tgt_sr)
         self.cpt["config"][-3] = self.cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
-        self.net_g = SynthesizerTrnMs768NSFsid(*self.cpt["config"], is_half=self.config.is_half)
+        self.net_g = SynthesizerTrnMs768NSFsid(
+            *self.cpt["config"], is_half=self.config.is_half
+        )
         del self.net_g.enc_q
         self.net_g.load_state_dict(self.cpt["weight"], strict=False)
         self.net_g.eval().to(self.config.device)
@@ -53,16 +56,17 @@ class VC:
             self.net_g = self.net_g.float()
         self.pipeline = Pipeline(self.tgt_sr, self.rmvpe_weights, self.config)
 
-    def vc_single(self,
-                  sid,
-                  input_audio_path,
-                  f0_up_key,
-                  f0_method,
-                  index_rate,
-                  resample_sr,
-                  rms_mix_rate,
-                  protect,
-                  ):
+    def vc_single(
+        self,
+        sid,
+        input_audio_path,
+        f0_up_key,
+        f0_method,
+        index_rate,
+        resample_sr,
+        rms_mix_rate,
+        protect,
+    ):
         assert input_audio_path, f"file not found: {input_audio_path}"
         f0_up_key = int(f0_up_key)
         audio = load_audio(input_audio_path, 16000)

@@ -4,14 +4,14 @@ import torch
 from configs.config import Config
 from infer.modules.vc.modules import VC
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raw_path = "assets/voice/test.wav"
     out_path = "assets/output/test.wav"
     rmvpe_path = "assets/rmvpe/rmvpe.pt"
     model_path = "assets/infer_model/Maaident1.pth"
     hubert_path = "assets/hubert/hubert_base.pt"
     config = Config()
-    config.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    config.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config.is_half = False
     config.use_jit = False
     config.n_cpu = 16
