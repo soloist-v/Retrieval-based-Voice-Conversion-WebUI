@@ -4,6 +4,7 @@ import os
 
 
 def load_language_list(language):
+    language = "zh_CN"
     with open(f"./i18n/locale/{language}.json", "r", encoding="utf-8") as f:
         language_list = json.load(f)
     return language_list
