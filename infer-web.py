@@ -62,7 +62,7 @@ if not config.nocheck:
                 logging.error("counld not satisfy all assets needed.")
                 exit(1)
 
-if config.dml == True:
+if config.dml:
     def forward_dml(ctx, x, scale):
         ctx.scale = scale
         res = x.clone().detach()
@@ -212,16 +212,17 @@ def if_done_multi(done, ps):
     done[0] = True
 
 
-def preprocess_dataset(trainset_dir, exp_dir, sr, n_p):
-    sr = sr_dict[sr]
+def preprocess_dataset(trainset_dir, exp_dir, sample_rate, number_of_process):
+    # 训练数据集目录, 实验名称/目录, 目标采样率, 用于提取音高和处理数据的CPU进程数
+    sample_rate = sr_dict[sample_rate]
     os.makedirs("%s/logs/%s" % (now_dir, exp_dir), exist_ok=True)
     f = open("%s/logs/%s/preprocess.log" % (now_dir, exp_dir), "w")
     f.close()
     cmd = '"%s" infer/modules/train/preprocess.py "%s" %s %s "%s/logs/%s" %s %.1f' % (
         config.python_cmd,
         trainset_dir,
-        sr,
-        n_p,
+        sample_rate,
+        number_of_process,
         now_dir,
         exp_dir,
         config.noparallel,
@@ -239,9 +240,9 @@ def preprocess_dataset(trainset_dir, exp_dir, sr, n_p):
             p,
         ),
     ).start()
-    while 1:
+    while True:
         with open("%s/logs/%s/preprocess.log" % (now_dir, exp_dir), "r") as f:
-            yield (f.read())
+            yield f.read()
         sleep(1)
         if done[0]:
             break
@@ -710,24 +711,24 @@ def train_index(exp_dir1, version19):
 
 # but5.click(train1key, [exp_dir1, sr2, if_f0_3, trainset_dir4, spk_id5, gpus6, np7, f0method8, save_epoch10, total_epoch11, batch_size12, if_save_latest13, pretrained_G14, pretrained_D15, gpus16, if_cache_gpu17], info3)
 def train1key(
-        exp_dir1,
-        sr2,
-        if_f0_3,
-        trainset_dir4,
-        spk_id5,
-        np7,
-        f0method8,
-        save_epoch10,
-        total_epoch11,
-        batch_size12,
-        if_save_latest13,
-        pretrained_G14,
-        pretrained_D15,
-        gpus16,
-        if_cache_gpu17,
-        if_save_every_weights18,
-        version19,
-        gpus_rmvpe,
+        exp_dir1,                   # 实验名称/目录
+        sr2,                        # 目标采样率(40k或48k)
+        if_f0_3,                    # 模型是否带音高指导(是/否)
+        trainset_dir4,              # 训练数据集目录
+        spk_id5,                    # 说话人ID
+        np7,                        # 用于提取音高和处理数据的CPU进程数
+        f0method8,                  # 音高提取算法(pm/harvest/dio/rmvpe/rmvpe_gpu)
+        save_epoch10,               # 模型保存频率(每多少个epoch保存一次)
+        total_epoch11,              # 训练总epoch数
+        batch_size12,               # 每张GPU的batch_size
+        if_save_latest13,           # 是否只保存最新的checkpoint文件
+        pretrained_G14,             # 预训练生成器模型路径
+        pretrained_D15,             # 预训练判别器模型路径
+        gpus16,                     # 用于训练的GPU设备编号
+        if_cache_gpu17,             # 是否将所有训练数据缓存到GPU内存
+        if_save_every_weights18,    # 是否在每个保存点将最终小模型保存到weights文件夹
+        version19,                  # 模型版本(v1或v2)
+        gpus_rmvpe,                 # RMVPE算法使用的GPU配置
 ):
     infos = []
 

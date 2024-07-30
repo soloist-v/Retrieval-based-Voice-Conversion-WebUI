@@ -10,6 +10,7 @@ from scipy.io import wavfile
 from configs.config import Config
 from infer.modules.vc.modules import VC
 
+
 ####
 # USAGE
 #

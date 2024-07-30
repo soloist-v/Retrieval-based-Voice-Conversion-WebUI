@@ -34,13 +34,13 @@ class LayerNorm(nn.Module):
 
 class ConvReluNorm(nn.Module):
     def __init__(
-        self,
-        in_channels,
-        hidden_channels,
-        out_channels,
-        kernel_size,
-        n_layers,
-        p_dropout,
+            self,
+            in_channels,
+            hidden_channels,
+            out_channels,
+            kernel_size,
+            n_layers,
+            p_dropout,
     ):
         super(ConvReluNorm, self).__init__()
         self.in_channels = in_channels
@@ -102,7 +102,7 @@ class DDSConv(nn.Module):
         self.norms_1 = nn.ModuleList()
         self.norms_2 = nn.ModuleList()
         for i in range(n_layers):
-            dilation = kernel_size**i
+            dilation = kernel_size ** i
             padding = (kernel_size * dilation - dilation) // 2
             self.convs_sep.append(
                 nn.Conv1d(
@@ -135,13 +135,13 @@ class DDSConv(nn.Module):
 
 class WN(torch.nn.Module):
     def __init__(
-        self,
-        hidden_channels,
-        kernel_size,
-        dilation_rate,
-        n_layers,
-        gin_channels=0,
-        p_dropout=0,
+            self,
+            hidden_channels,    # 192   # 192
+            kernel_size,        # 5     # 5
+            dilation_rate,      # 1     # 1
+            n_layers,           # 16    # 3
+            gin_channels=0,     # 256   # 256
+            p_dropout=0,        # 0     # 0
     ):
         super(WN, self).__init__()
         assert kernel_size % 2 == 1
@@ -163,7 +163,7 @@ class WN(torch.nn.Module):
             self.cond_layer = torch.nn.utils.weight_norm(cond_layer, name="weight")
 
         for i in range(n_layers):
-            dilation = dilation_rate**i
+            dilation = dilation_rate ** i
             padding = int((kernel_size * dilation - dilation) / 2)
             in_layer = torch.nn.Conv1d(
                 hidden_channels,
@@ -186,7 +186,7 @@ class WN(torch.nn.Module):
             self.res_skip_layers.append(res_skip_layer)
 
     def forward(
-        self, x: torch.Tensor, x_mask: torch.Tensor, g: Optional[torch.Tensor] = None
+            self, x: torch.Tensor, x_mask: torch.Tensor, g: Optional[torch.Tensor] = None
     ):
         output = torch.zeros_like(x)
         n_channels_tensor = torch.IntTensor([self.hidden_channels])
@@ -195,12 +195,12 @@ class WN(torch.nn.Module):
             g = self.cond_layer(g)
 
         for i, (in_layer, res_skip_layer) in enumerate(
-            zip(self.in_layers, self.res_skip_layers)
+                zip(self.in_layers, self.res_skip_layers)
         ):
             x_in = in_layer(x)
             if g is not None:
                 cond_offset = i * 2 * self.hidden_channels
-                g_l = g[:, cond_offset : cond_offset + 2 * self.hidden_channels, :]
+                g_l = g[:, cond_offset: cond_offset + 2 * self.hidden_channels, :]
             else:
                 g_l = torch.zeros_like(x_in)
 
@@ -211,7 +211,7 @@ class WN(torch.nn.Module):
             if i < self.n_layers - 1:
                 res_acts = res_skip_acts[:, : self.hidden_channels, :]
                 x = (x + res_acts) * x_mask
-                output = output + res_skip_acts[:, self.hidden_channels :, :]
+                output = output + res_skip_acts[:, self.hidden_channels:, :]
             else:
                 output = output + res_skip_acts
         return output * x_mask
@@ -228,22 +228,22 @@ class WN(torch.nn.Module):
         if self.gin_channels != 0:
             for hook in self.cond_layer._forward_pre_hooks.values():
                 if (
-                    hook.__module__ == "torch.nn.utils.weight_norm"
-                    and hook.__class__.__name__ == "WeightNorm"
+                        hook.__module__ == "torch.nn.utils.weight_norm"
+                        and hook.__class__.__name__ == "WeightNorm"
                 ):
                     torch.nn.utils.remove_weight_norm(self.cond_layer)
         for l in self.in_layers:
             for hook in l._forward_pre_hooks.values():
                 if (
-                    hook.__module__ == "torch.nn.utils.weight_norm"
-                    and hook.__class__.__name__ == "WeightNorm"
+                        hook.__module__ == "torch.nn.utils.weight_norm"
+                        and hook.__class__.__name__ == "WeightNorm"
                 ):
                     torch.nn.utils.remove_weight_norm(l)
         for l in self.res_skip_layers:
             for hook in l._forward_pre_hooks.values():
                 if (
-                    hook.__module__ == "torch.nn.utils.weight_norm"
-                    and hook.__class__.__name__ == "WeightNorm"
+                        hook.__module__ == "torch.nn.utils.weight_norm"
+                        and hook.__class__.__name__ == "WeightNorm"
                 ):
                     torch.nn.utils.remove_weight_norm(l)
         return self
@@ -350,15 +350,15 @@ class ResBlock1(torch.nn.Module):
         for l in self.convs1:
             for hook in l._forward_pre_hooks.values():
                 if (
-                    hook.__module__ == "torch.nn.utils.weight_norm"
-                    and hook.__class__.__name__ == "WeightNorm"
+                        hook.__module__ == "torch.nn.utils.weight_norm"
+                        and hook.__class__.__name__ == "WeightNorm"
                 ):
                     torch.nn.utils.remove_weight_norm(l)
         for l in self.convs2:
             for hook in l._forward_pre_hooks.values():
                 if (
-                    hook.__module__ == "torch.nn.utils.weight_norm"
-                    and hook.__class__.__name__ == "WeightNorm"
+                        hook.__module__ == "torch.nn.utils.weight_norm"
+                        and hook.__class__.__name__ == "WeightNorm"
                 ):
                     torch.nn.utils.remove_weight_norm(l)
         return self
@@ -413,8 +413,8 @@ class ResBlock2(torch.nn.Module):
         for l in self.convs:
             for hook in l._forward_pre_hooks.values():
                 if (
-                    hook.__module__ == "torch.nn.utils.weight_norm"
-                    and hook.__class__.__name__ == "WeightNorm"
+                        hook.__module__ == "torch.nn.utils.weight_norm"
+                        and hook.__class__.__name__ == "WeightNorm"
                 ):
                     torch.nn.utils.remove_weight_norm(l)
         return self
@@ -422,11 +422,11 @@ class ResBlock2(torch.nn.Module):
 
 class Log(nn.Module):
     def forward(
-        self,
-        x: torch.Tensor,
-        x_mask: torch.Tensor,
-        g: Optional[torch.Tensor] = None,
-        reverse: bool = False,
+            self,
+            x: torch.Tensor,
+            x_mask: torch.Tensor,
+            g: Optional[torch.Tensor] = None,
+            reverse: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         if not reverse:
             y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
@@ -442,11 +442,9 @@ class Flip(nn.Module):
     # can't take variable number of arguments or \
     # use keyword-only arguments with defaults
     def forward(
-        self,
-        x: torch.Tensor,
-        x_mask: torch.Tensor,
-        g: Optional[torch.Tensor] = None,
-        reverse: bool = False,
+            self,
+            x: torch.Tensor,
+            reverse: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         x = torch.flip(x, [1])
         if not reverse:
@@ -476,15 +474,15 @@ class ElementwiseAffine(nn.Module):
 
 class ResidualCouplingLayer(nn.Module):
     def __init__(
-        self,
-        channels,
-        hidden_channels,
-        kernel_size,
-        dilation_rate,
-        n_layers,
-        p_dropout=0,
-        gin_channels=0,
-        mean_only=False,
+            self,
+            channels,  # 192
+            hidden_channels,  # 192
+            kernel_size,  # 5
+            dilation_rate,  # 1
+            n_layers,  # 3
+            p_dropout=0,  # 0
+            gin_channels=0,  # 256
+            mean_only=False,
     ):
         assert channels % 2 == 0, "channels should be divisible by 2"
         super(ResidualCouplingLayer, self).__init__()
@@ -498,23 +496,23 @@ class ResidualCouplingLayer(nn.Module):
 
         self.pre = nn.Conv1d(self.half_channels, hidden_channels, 1)
         self.enc = WN(
-            hidden_channels,
-            kernel_size,
-            dilation_rate,
-            n_layers,
-            p_dropout=float(p_dropout),
-            gin_channels=gin_channels,
+            hidden_channels,                # 192
+            kernel_size,                    # 5
+            dilation_rate,                  # 1
+            n_layers,                       # 3
+            p_dropout=float(p_dropout),     # 0
+            gin_channels=gin_channels,      # 256
         )
         self.post = nn.Conv1d(hidden_channels, self.half_channels * (2 - mean_only), 1)
         self.post.weight.data.zero_()
         self.post.bias.data.zero_()
 
     def forward(
-        self,
-        x: torch.Tensor,
-        x_mask: torch.Tensor,
-        g: Optional[torch.Tensor] = None,
-        reverse: bool = False,
+            self,
+            x: torch.Tensor,
+            x_mask: torch.Tensor,
+            g: Optional[torch.Tensor] = None,
+            reverse: bool = False,
     ):
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0) * x_mask
@@ -542,8 +540,8 @@ class ResidualCouplingLayer(nn.Module):
     def __prepare_scriptable__(self):
         for hook in self.enc._forward_pre_hooks.values():
             if (
-                hook.__module__ == "torch.nn.utils.weight_norm"
-                and hook.__class__.__name__ == "WeightNorm"
+                    hook.__module__ == "torch.nn.utils.weight_norm"
+                    and hook.__class__.__name__ == "WeightNorm"
             ):
                 torch.nn.utils.remove_weight_norm(self.enc)
         return self
@@ -551,13 +549,13 @@ class ResidualCouplingLayer(nn.Module):
 
 class ConvFlow(nn.Module):
     def __init__(
-        self,
-        in_channels,
-        filter_channels,
-        kernel_size,
-        n_layers,
-        num_bins=10,
-        tail_bound=5.0,
+            self,
+            in_channels,
+            filter_channels,
+            kernel_size,
+            n_layers,
+            num_bins=10,
+            tail_bound=5.0,
     ):
         super(ConvFlow, self).__init__()
         self.in_channels = in_channels
@@ -577,11 +575,11 @@ class ConvFlow(nn.Module):
         self.proj.bias.data.zero_()
 
     def forward(
-        self,
-        x: torch.Tensor,
-        x_mask: torch.Tensor,
-        g: Optional[torch.Tensor] = None,
-        reverse=False,
+            self,
+            x: torch.Tensor,
+            x_mask: torch.Tensor,
+            g: Optional[torch.Tensor] = None,
+            reverse=False,
     ):
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0)
@@ -592,10 +590,10 @@ class ConvFlow(nn.Module):
         h = h.reshape(b, c, -1, t).permute(0, 1, 3, 2)  # [b, cx?, t] -> [b, c, t, ?]
 
         unnormalized_widths = h[..., : self.num_bins] / math.sqrt(self.filter_channels)
-        unnormalized_heights = h[..., self.num_bins : 2 * self.num_bins] / math.sqrt(
+        unnormalized_heights = h[..., self.num_bins: 2 * self.num_bins] / math.sqrt(
             self.filter_channels
         )
-        unnormalized_derivatives = h[..., 2 * self.num_bins :]
+        unnormalized_derivatives = h[..., 2 * self.num_bins:]
 
         x1, logabsdet = piecewise_rational_quadratic_transform(
             x1,

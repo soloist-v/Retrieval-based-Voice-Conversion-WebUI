@@ -68,9 +68,9 @@ class VC:
         audio = load_audio(input_audio_path, 16000)
 
         # 不是必须的
-        audio_max = np.abs(audio).max() / 0.95
-        if audio_max > 1:
-            audio /= audio_max
+        # audio_max = np.abs(audio).max() / 0.95
+        # if audio_max > 1:
+        #     audio /= audio_max
 
         audio_opt = self.pipeline.pipeline(
             sid,
