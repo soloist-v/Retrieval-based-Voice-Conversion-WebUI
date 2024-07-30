@@ -3,10 +3,10 @@ import numpy as np
 
 # 这个函数来自librosa库,用于计算音频信号的均方根(RMS)值
 def get_rms(
-        y,                      # 输入音频信号
-        frame_length=2048,      # 每帧的长度,默认2048样本
-        hop_length=512,         # 帧之间的重叠长度,默认512样本
-        pad_mode="constant",    # 填充模式,默认为常数填充
+        y,  # 输入音频信号
+        frame_length=2048,  # 每帧的长度,默认2048样本
+        hop_length=512,  # 帧之间的重叠长度,默认512样本
+        pad_mode="constant",  # 填充模式,默认为常数填充
 ):
     # 计算需要在信号两端添加的填充长度
     padding = (int(frame_length // 2), int(frame_length // 2))
@@ -44,12 +44,12 @@ def get_rms(
 class Slicer:
     def __init__(
             self,
-            sample_rate: int,                    # 采样率
-            threshold: float = -40.0,   # 音量阈值，单位为分贝
-            min_length: int = 5000,     # 最小音频片段长度，单位为毫秒
-            min_interval: int = 300,    # 最小间隔，单位为毫秒
-            hop_size: int = 20,         # 跳跃大小，单位为毫秒
-            max_sil_kept: int = 5000,   # 保留的最大静音长度，单位为毫秒
+            sample_rate: int,  # 采样率
+            threshold: float = -40.0,  # 音量阈值，单位为分贝
+            min_length: int = 5000,  # 最小音频片段长度，单位为毫秒
+            min_interval: int = 300,  # 最小间隔，单位为毫秒
+            hop_size: int = 20,  # 跳跃大小，单位为毫秒
+            max_sil_kept: int = 5000,  # 保留的最大静音长度，单位为毫秒
     ):
         # 检查参数是否满足条件：最小长度 >= 最小间隔 >= 跳跃大小
         if not min_length >= min_interval >= hop_size:
@@ -78,140 +78,115 @@ class Slicer:
             # 开始位置：begin * self.hop_size
             # 结束位置：min(waveform.shape[1], end * self.hop_size)，防止越界
             return waveform[
-                   :, begin * self.hop_size : min(waveform.shape[1], end * self.hop_size)
+                   :, begin * self.hop_size: min(waveform.shape[1], end * self.hop_size)
                    ]
         else:
             # 如果是一维数组（单声道），直接切片
             # 开始位置：begin * self.hop_size
             # 结束位置：min(waveform.shape[0], end * self.hop_size)，防止越界
             return waveform[
-                   begin * self.hop_size : min(waveform.shape[0], end * self.hop_size)
+                   begin * self.hop_size: min(waveform.shape[0], end * self.hop_size)
                    ]
 
-    # @timeit
+    # 定义一个名为slice的方法,用于将音频波形切片
     def slice(self, waveform):
-        # 如果波形是多维的（如立体声），取平均值转为单声道
-        if len(waveform.shape) > 1:
-            samples = waveform.mean(axis=0)
-        else:
-            samples = waveform
+        # 如果输入是多通道音频，将其转换为单通道；否则保持原样
+        samples = waveform.mean(axis=0) if len(waveform.shape) > 1 else waveform
 
-        # 如果样本长度小于等于最小长度，直接返回整个波形
+        # 如果音频长度小于等于最小长度阈值，直接返回整个音频
         if samples.shape[0] <= self.min_length:
             return [waveform]
 
-        # 计算均方根（RMS）值列表
+        # 计算音频的RMS（均方根）值，用于判断音量大小
         rms_list = get_rms(
             y=samples, frame_length=self.win_size, hop_length=self.hop_size
         ).squeeze(0)
 
-        sil_tags = []  # 用于存储静音区间的标签
-        silence_start = None  # 静音开始的位置
+        sil_tags = []  # 存储检测到的静音区间
+        silence_start = None  # 当前静音区间的开始位置
         clip_start = 0  # 当前音频片段的开始位置
 
-        # 遍历RMS值列表
+        # 遍历每一帧的RMS值
         for i, rms in enumerate(rms_list):
-            # 如果当前帧的RMS值小于阈值，认为是静音
+            # 如果当前帧RMS值小于阈值，认为是静音
             if rms < self.threshold:
-                # 记录静音开始的位置
-                if silence_start is None:
-                    silence_start = i
-                continue
+                # 如果是新的静音开始，记录其位置
+                silence_start = i if silence_start is None else silence_start
+            elif silence_start is not None:
+                # 如果当前帧不是静音，且之前检测到了静音开始，判断是否需要切片
 
-            # 如果不是静音且未记录静音开始，继续循环
-            if silence_start is None:
-                continue
+                # 判断是否为开头的长静音
+                is_leading_silence = silence_start == 0 and i > self.max_sil_kept
+                # 判断是否为中间需要切片的静音
+                need_slice_middle = (
+                        i - silence_start >= self.min_interval
+                        and i - clip_start >= self.min_length
+                )
 
-            # 判断是否需要切片
-            is_leading_silence = silence_start == 0 and i > self.max_sil_kept
-            need_slice_middle = (
-                    i - silence_start >= self.min_interval
-                    and i - clip_start >= self.min_length
-            )
+                # 如果需要切片
+                if is_leading_silence or need_slice_middle:
+                    silence_length = i - silence_start  # 计算静音长度
 
-            # 如果不需要切片，重置静音开始位置并继续循环
-            if not is_leading_silence and not need_slice_middle:
+                    # 处理短静音
+                    if silence_length <= self.max_sil_kept:
+                        # 在静音区间找到RMS最小的位置作为切点
+                        pos = silence_start + np.argmin(rms_list[silence_start:i+1])
+                        sil_tag = (0, pos) if silence_start == 0 else (pos, pos)
+                        clip_start = pos
+                    # 处理中等长度静音
+                    elif silence_length <= self.max_sil_kept * 2:
+                        # 在静音中间区域寻找最佳切点
+                        pos = i - self.max_sil_kept + np.argmin(rms_list[i-self.max_sil_kept:silence_start+self.max_sil_kept+1])
+                        # 在静音开始和结束区域各找一个切点
+                        pos_l = silence_start + np.argmin(rms_list[silence_start:silence_start+self.max_sil_kept+1])
+                        pos_r = i - self.max_sil_kept + np.argmin(rms_list[i-self.max_sil_kept:i+1])
+                        if silence_start == 0:
+                            sil_tag = (0, pos_r)
+                            clip_start = pos_r
+                        else:
+                            sil_tag = (min(pos_l, pos), max(pos_r, pos))
+                            clip_start = max(pos_r, pos)
+                    # 处理长静音
+                    else:
+                        # 在静音的开始和结束各取一个切点
+                        pos_l = silence_start + np.argmin(rms_list[silence_start:silence_start+self.max_sil_kept+1])
+                        pos_r = i - self.max_sil_kept + np.argmin(rms_list[i-self.max_sil_kept:i+1])
+                        sil_tag = (0, pos_r) if silence_start == 0 else (pos_l, pos_r)
+                        clip_start = pos_r
+
+                    # 将找到的静音标签添加到列表中
+                    sil_tags.append(sil_tag)
+
+                # 重置静音开始位置
                 silence_start = None
-                continue
 
-            # 需要切片，记录要移除的静音帧范围
-            if i - silence_start <= self.max_sil_kept:
-                # 在静音区间找到RMS最小的位置
-                pos = rms_list[silence_start : i + 1].argmin() + silence_start
-                if silence_start == 0:
-                    sil_tags.append((0, pos))
-                else:
-                    sil_tags.append((pos, pos))
-                clip_start = pos
-            elif i - silence_start <= self.max_sil_kept * 2:
-                # 在较长的静音区间中找到最佳切割点
-                pos = rms_list[
-                      i - self.max_sil_kept : silence_start + self.max_sil_kept + 1
-                      ].argmin()
-                pos += i - self.max_sil_kept
-                pos_l = (
-                        rms_list[
-                        silence_start : silence_start + self.max_sil_kept + 1
-                        ].argmin()
-                        + silence_start
-                )
-                pos_r = (
-                        rms_list[i - self.max_sil_kept : i + 1].argmin()
-                        + i
-                        - self.max_sil_kept
-                )
-                if silence_start == 0:
-                    sil_tags.append((0, pos_r))
-                    clip_start = pos_r
-                else:
-                    sil_tags.append((min(pos_l, pos), max(pos_r, pos)))
-                    clip_start = max(pos_r, pos)
-            else:
-                # 对于非常长的静音区间，在两端各取一段
-                pos_l = (
-                        rms_list[
-                        silence_start : silence_start + self.max_sil_kept + 1
-                        ].argmin()
-                        + silence_start
-                )
-                pos_r = (
-                        rms_list[i - self.max_sil_kept : i + 1].argmin()
-                        + i
-                        - self.max_sil_kept
-                )
-                if silence_start == 0:
-                    sil_tags.append((0, pos_r))
-                else:
-                    sil_tags.append((pos_l, pos_r))
-                clip_start = pos_r
-            silence_start = None
-
-        # 处理尾部静音
+        # 处理音频尾部的静音
         total_frames = rms_list.shape[0]
-        if (
-                silence_start is not None
-                and total_frames - silence_start >= self.min_interval
-        ):
+        if silence_start is not None and total_frames - silence_start >= self.min_interval:
             silence_end = min(total_frames, silence_start + self.max_sil_kept)
-            pos = rms_list[silence_start : silence_end + 1].argmin() + silence_start
+            pos = silence_start + np.argmin(rms_list[silence_start:silence_end+1])
             sil_tags.append((pos, total_frames + 1))
 
-        # 应用切片并返回结果
-        if len(sil_tags) == 0:
+        # 如果没有检测到需要切片的静音，返回原始音频
+        if not sil_tags:
             return [waveform]
-        else:
-            chunks = []
-            if sil_tags[0][0] > 0:
-                chunks.append(self._apply_slice(waveform, 0, sil_tags[0][0]))
-            for i in range(len(sil_tags) - 1):
-                chunks.append(
-                    self._apply_slice(waveform, sil_tags[i][1], sil_tags[i + 1][0])
-                )
-            if sil_tags[-1][1] < total_frames:
-                chunks.append(
-                    self._apply_slice(waveform, sil_tags[-1][1], total_frames)
-                )
-            return chunks
+
+        # 根据检测到的静音标签切分音频
+        chunks = []
+        # 处理第一个非静音片段（如果存在）
+        if sil_tags[0][0] > 0:
+            chunks.append(self._apply_slice(waveform, 0, sil_tags[0][0]))
+
+        # 处理中间的非静音片段
+        for i in range(len(sil_tags) - 1):
+            chunks.append(self._apply_slice(waveform, sil_tags[i][1], sil_tags[i + 1][0]))
+
+        # 处理最后一个非静音片段（如果存在）
+        if sil_tags[-1][1] < total_frames:
+            chunks.append(self._apply_slice(waveform, sil_tags[-1][1], total_frames))
+
+        # 返回切分后的音频片段列表
+        return chunks
 
 
 def main():

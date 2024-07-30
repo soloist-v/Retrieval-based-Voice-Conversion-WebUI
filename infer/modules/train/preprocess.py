@@ -57,30 +57,43 @@ class PreProcess:
         os.makedirs(self.wavs16k_dir, exist_ok=True)
 
     def norm_write(self, tmp_audio, idx0, idx1):
+        # 计算音频数据的绝对值的最大值
         tmp_max = np.abs(tmp_audio).max()
+
+        # 如果最大值超过2.5,认为音频可能有问题,打印信息并返回
         if tmp_max > 2.5:
             print("%s-%s-%s-filtered" % (idx0, idx1, tmp_max))
             return
+
+        # 对音频进行归一化处理
+        # 先将音频缩放到[-self.max*self.alpha, self.max*self.alpha]范围
+        # 然后与原音频按self.alpha的比例混合,这样可以保留一些原始特征
         tmp_audio = (tmp_audio / tmp_max * (self.max * self.alpha)) + (
-            1 - self.alpha
+                1 - self.alpha
         ) * tmp_audio
+
+        # 将处理后的音频保存为原采样率的wav文件
         wavfile.write(
-            "%s/%s_%s.wav" % (self.gt_wavs_dir, idx0, idx1),
-            self.sample_rate,
-            tmp_audio.astype(np.float32),
+            "%s/%s_%s.wav" % (self.gt_wavs_dir, idx0, idx1),  # 文件名格式为"idx0_idx1.wav"
+            self.sample_rate,  # 使用原采样率
+            tmp_audio.astype(np.float32),  # 将音频数据转换为32位浮点数
         )
+
+        # 将音频重采样到16kHz
         tmp_audio = librosa.resample(
             tmp_audio, orig_sr=self.sample_rate, target_sr=16000
-        )  # , res_type="soxr_vhq"
+        )  # , res_type="soxr_vhq"  # 这是一个被注释掉的参数,可能用于指定重采样方法
+
+        # 将重采样后的音频保存为16kHz的wav文件
         wavfile.write(
-            "%s/%s_%s.wav" % (self.wavs16k_dir, idx0, idx1),
-            16000,
-            tmp_audio.astype(np.float32),
+            "%s/%s_%s.wav" % (self.wavs16k_dir, idx0, idx1),  # 文件名格式与上面相同
+            16000,  # 采样率为16kHz
+            tmp_audio.astype(np.float32),  # 将音频数据转换为32位浮点数
         )
 
     def pipeline(self, path, idx0):
         try:
-            # 加载音频文件,将其转换为指定采样率的数组
+            # 加载音频文件,将其转换为指定采样率的数组, 这一步会导致采样率被指定
             audio = load_audio(path, self.sample_rate)
 
             # 对音频进行高通滤波,去除低频噪声
