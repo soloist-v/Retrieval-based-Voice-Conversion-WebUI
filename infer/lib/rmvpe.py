@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class STFT(torch.nn.Module):
     def __init__(
-            self, filter_length=1024, hop_length=512, win_length=None, window="hann"
+        self, filter_length=1024, hop_length=512, win_length=None, window="hann"
     ):
         """
         This module implements an STFT using 1D convolution and 1D transpose convolutions.
@@ -99,7 +99,7 @@ class STFT(torch.nn.Module):
         cutoff = int((self.filter_length / 2) + 1)
         real_part = forward_transform[:, :cutoff, :]
         imag_part = forward_transform[:, cutoff:, :]
-        magnitude = torch.sqrt(real_part ** 2 + imag_part ** 2)
+        magnitude = torch.sqrt(real_part**2 + imag_part**2)
         if return_phase:
             phase = torch.atan2(imag_part.data, real_part.data)
             return magnitude, phase
@@ -130,14 +130,14 @@ class STFT(torch.nn.Module):
         )
         inverse_transform = torch.matmul(self.inverse_basis, cat)
         inverse_transform = fold(inverse_transform)[
-                            :, 0, 0, self.pad_amount: -self.pad_amount
-                            ]
+            :, 0, 0, self.pad_amount : -self.pad_amount
+        ]
         window_square_sum = (
             self.fft_window.pow(2).repeat(cat.size(-1), 1).T.unsqueeze(0)
         )
         window_square_sum = fold(window_square_sum)[
-                            :, 0, 0, self.pad_amount: -self.pad_amount
-                            ]
+            :, 0, 0, self.pad_amount : -self.pad_amount
+        ]
         inverse_transform /= window_square_sum
         return inverse_transform
 
@@ -212,14 +212,14 @@ class ConvBlockRes(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(
-            self,
-            in_channels,
-            in_size,
-            n_encoders,
-            kernel_size,
-            n_blocks,
-            out_channels=16,
-            momentum=0.01,
+        self,
+        in_channels,
+        in_size,
+        n_encoders,
+        kernel_size,
+        n_blocks,
+        out_channels=16,
+        momentum=0.01,
     ):
         super(Encoder, self).__init__()
         self.n_encoders = n_encoders
@@ -250,7 +250,7 @@ class Encoder(nn.Module):
 
 class ResEncoderBlock(nn.Module):
     def __init__(
-            self, in_channels, out_channels, kernel_size, n_blocks=1, momentum=0.01
+        self, in_channels, out_channels, kernel_size, n_blocks=1, momentum=0.01
     ):
         super(ResEncoderBlock, self).__init__()
         self.n_blocks = n_blocks
@@ -341,13 +341,13 @@ class Decoder(nn.Module):
 
 class DeepUnet(nn.Module):
     def __init__(
-            self,
-            kernel_size,
-            n_blocks,
-            en_de_layers=5,
-            inter_layers=4,
-            in_channels=1,
-            en_out_channels=16,
+        self,
+        kernel_size,
+        n_blocks,
+        en_de_layers=5,
+        inter_layers=4,
+        in_channels=1,
+        en_out_channels=16,
     ):
         super(DeepUnet, self).__init__()
         self.encoder = Encoder(
@@ -372,14 +372,14 @@ class DeepUnet(nn.Module):
 
 class E2E(nn.Module):
     def __init__(
-            self,
-            n_blocks,
-            n_gru,
-            kernel_size,
-            en_de_layers=5,
-            inter_layers=4,
-            in_channels=1,
-            en_out_channels=16,
+        self,
+        n_blocks,
+        n_gru,
+        kernel_size,
+        en_de_layers=5,
+        inter_layers=4,
+        in_channels=1,
+        en_out_channels=16,
     ):
         super(E2E, self).__init__()
         self.unet = DeepUnet(
@@ -417,16 +417,16 @@ from librosa.filters import mel
 
 class MelSpectrogram(torch.nn.Module):
     def __init__(
-            self,
-            is_half,
-            n_mel_channels,
-            sampling_rate,
-            win_length,
-            hop_length,
-            n_fft=None,
-            mel_fmin=0,
-            mel_fmax=None,
-            clamp=1e-5,
+        self,
+        is_half,
+        n_mel_channels,
+        sampling_rate,
+        win_length,
+        hop_length,
+        n_fft=None,
+        mel_fmin=0,
+        mel_fmax=None,
+        clamp=1e-5,
     ):
         super().__init__()
         n_fft = win_length if n_fft is None else n_fft
@@ -492,26 +492,77 @@ class MelSpectrogram(torch.nn.Module):
         return log_mel_spec
 
 
-def get_default_model(model_path: str, is_half: bool):
-    model = E2E(4, 1, (2, 2))
-    ckpt = torch.load(model_path, map_location="cpu")
-    model.load_state_dict(ckpt)
-    model.eval()
-    if is_half:
-        model = model.half()
-    else:
-        model = model.float()
-    return model
-
-
 class RMVPE:
-    def __init__(self, model_path: str, is_half, device):
+    def __init__(self, model_path: str, is_half, device=None, use_jit=False):
         self.resample_kernel = {}
         self.resample_kernel = {}
         self.is_half = is_half
+        if device is None:
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.device = device
-        self.mel_extractor = MelSpectrogram(is_half, 128, 16000, 1024, 160, None, 30, 8000).to(device)
-        self.model = get_default_model(model_path, is_half).to(device)
+        self.mel_extractor = MelSpectrogram(
+            is_half, 128, 16000, 1024, 160, None, 30, 8000
+        ).to(device)
+        if "privateuseone" in str(device):
+            import onnxruntime as ort
+
+            ort_session = ort.InferenceSession(
+                "%s/rmvpe.onnx" % os.environ["rmvpe_root"],
+                providers=["DmlExecutionProvider"],
+            )
+            self.model = ort_session
+        else:
+            if str(self.device) == "cuda":
+                self.device = torch.device("cuda:0")
+
+            def get_jit_model():
+                jit_model_path = model_path.rstrip(".pth")
+                jit_model_path += ".half.jit" if is_half else ".jit"
+                reload = False
+                if os.path.exists(jit_model_path):
+                    ckpt = jit.load(jit_model_path)
+                    model_device = ckpt["device"]
+                    if model_device != str(self.device):
+                        reload = True
+                else:
+                    reload = True
+
+                if reload:
+                    ckpt = jit.rmvpe_jit_export(
+                        model_path=model_path,
+                        mode="script",
+                        inputs_path=None,
+                        save_path=jit_model_path,
+                        device=device,
+                        is_half=is_half,
+                    )
+                model = torch.jit.load(BytesIO(ckpt["model"]), map_location=device)
+                return model
+
+            def get_default_model():
+                model = E2E(4, 1, (2, 2))
+                ckpt = torch.load(model_path, map_location="cpu")
+                model.load_state_dict(ckpt)
+                model.eval()
+                if is_half:
+                    model = model.half()
+                else:
+                    model = model.float()
+                return model
+
+            if use_jit:
+                if is_half and "cpu" in str(self.device):
+                    logger.warning(
+                        "Use default rmvpe model. \
+                                 Jit is not supported on the CPU for half floating point"
+                    )
+                    self.model = get_default_model()
+                else:
+                    self.model = get_jit_model()
+            else:
+                self.model = get_default_model()
+
+            self.model = self.model.to(device)
         cents_mapping = 20 * np.arange(360) + 1997.3794084376191
         self.cents_mapping = np.pad(cents_mapping, (4, 4))  # 368
 
@@ -531,49 +582,67 @@ class RMVPE:
             else:
                 mel = mel.half() if self.is_half else mel.float()
                 hidden = self.model(mel)
-                if not os.path.exists("assets/rmvpe/rmvpe_new.onnx"):
-                    torch.onnx.export(self.model, mel, opset_version=17, f="assets/rmvpe/rmvpe_new.onnx",
-                                      input_names=["input"],
-                                      output_names=["output"],
-                                      dynamic_axes={"input": {2: "time"}, "output": {2: "time"}},
-                                      )
             return hidden[:, :n_frames]
 
     def decode(self, hidden, thred=0.03):
         cents_pred = self.to_local_average_cents(hidden, thred=thred)
         f0 = 10 * (2 ** (cents_pred / 1200))
         f0[f0 == 10] = 0
+        # f0 = np.array([10 * (2 ** (cent_pred / 1200)) if cent_pred else 0 for cent_pred in cents_pred])
         return f0
 
     def infer_from_audio(self, audio, thred=0.03):
+        # torch.cuda.synchronize()
+        # t0 = ttime()
         if not torch.is_tensor(audio):
             audio = torch.from_numpy(audio)
-        mel = self.mel_extractor(audio.float().to(self.device).unsqueeze(0), center=True)
+        mel = self.mel_extractor(
+            audio.float().to(self.device).unsqueeze(0), center=True
+        )
+        # print(123123123,mel.device.type)
+        # torch.cuda.synchronize()
+        # t1 = ttime()
         hidden = self.mel2hidden(mel)
-        hidden = hidden.squeeze(0).cpu().numpy()
-        if self.is_half:
+        # torch.cuda.synchronize()
+        # t2 = ttime()
+        # print(234234,hidden.device.type)
+        if "privateuseone" not in str(self.device):
+            hidden = hidden.squeeze(0).cpu().numpy()
+        else:
+            hidden = hidden[0]
+        if self.is_half == True:
             hidden = hidden.astype("float32")
+
         f0 = self.decode(hidden, thred=thred)
+        # torch.cuda.synchronize()
+        # t3 = ttime()
+        # print("hmvpe:%s\t%s\t%s\t%s"%(t1-t0,t2-t1,t3-t2,t3-t0))
         return f0
 
     def to_local_average_cents(self, salience, thred=0.05):
+        # t0 = ttime()
         center = np.argmax(salience, axis=1)  # 帧长#index
         salience = np.pad(salience, ((0, 0), (4, 4)))  # 帧长,368
+        # t1 = ttime()
         center += 4
         todo_salience = []
         todo_cents_mapping = []
         starts = center - 4
         ends = center + 5
         for idx in range(salience.shape[0]):
-            todo_salience.append(salience[:, starts[idx]: ends[idx]][idx])
-            todo_cents_mapping.append(self.cents_mapping[starts[idx]: ends[idx]])
+            todo_salience.append(salience[:, starts[idx] : ends[idx]][idx])
+            todo_cents_mapping.append(self.cents_mapping[starts[idx] : ends[idx]])
+        # t2 = ttime()
         todo_salience = np.array(todo_salience)  # 帧长，9
         todo_cents_mapping = np.array(todo_cents_mapping)  # 帧长，9
         product_sum = np.sum(todo_salience * todo_cents_mapping, 1)
         weight_sum = np.sum(todo_salience, 1)  # 帧长
         devided = product_sum / weight_sum  # 帧长
+        # t3 = ttime()
         maxx = np.max(salience, axis=1)  # 帧长
         devided[maxx <= thred] = 0
+        # t4 = ttime()
+        # print("decode:%s\t%s\t%s\t%s" % (t1 - t0, t2 - t1, t3 - t2, t4 - t3))
         return devided
 
 

@@ -705,9 +705,7 @@ if __name__ == "__main__":
             return True
 
         def start_vc(self):
-            # 清空toch显存
             torch.cuda.empty_cache()
-            # 创建RVC推理实例
             self.rvc = rvc_for_realtime.RVC(
                 self.gui_config.pitch,
                 self.gui_config.formant,

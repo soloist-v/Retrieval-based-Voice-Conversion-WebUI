@@ -1,4 +1,4 @@
-[import math
+import math
 import random
 from typing import Optional, Tuple
 from fairseq.checkpoint_utils import load_model_ensemble_and_task

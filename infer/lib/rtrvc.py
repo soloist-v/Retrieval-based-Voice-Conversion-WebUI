@@ -319,6 +319,7 @@ class RVC:
                 "assets/rmvpe/rmvpe.pt",
                 is_half=self.is_half,
                 device=self.device,
+                use_jit=self.config.use_jit,
             )
         f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
         f0 *= pow(2, f0_up_key / 12)

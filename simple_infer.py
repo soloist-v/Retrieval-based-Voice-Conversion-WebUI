@@ -1,25 +1,17 @@
-import os
-import sys
-from multiprocessing import Manager as M
-
 import fairseq
 import faiss
 import librosa
 import numpy as np
+import soundfile
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchaudio.transforms import Resample
-
+from dataclasses import dataclass
 from configs.config import Config
 from infer.lib.jit.get_synthesizer import get_synthesizer
 from infer.lib.rmvpe import RMVPE
 from tools.torchgate import TorchGate
-
-now_dir = os.getcwd()
-sys.path.append(now_dir)
-
-mm = M()
 
 
 def phase_vocoder(a, b, fade_out, fade_in):
@@ -78,24 +70,16 @@ class RVC:
         self.f0_mel_max = 1127 * np.log(1 + self.f0_max / 700)
         self.use_jit = self.config.use_jit
         self.is_half = config.is_half
-
         if index_rate != 0:
             self.index = faiss.read_index(index_path)
             self.big_npy = self.index.reconstruct_n(0, self.index.ntotal)
         self.pth_path: str = pth_path
         self.index_path = index_path
         self.index_rate = index_rate
-        self.cache_pitch: torch.Tensor = torch.zeros(
-            1024, device=self.device, dtype=torch.long
-        )
-        self.cache_pitchf = torch.zeros(
-            1024, device=self.device, dtype=torch.float32
-        )
-
+        self.cache_pitch: torch.Tensor = torch.zeros(1024, device=self.device, dtype=torch.long)
+        self.cache_pitchf = torch.zeros(1024, device=self.device, dtype=torch.float32)
         self.resample_kernel = {}
-
         self.model_rmvpe = RMVPE(rmvpe_path, is_half=self.is_half, device=self.device)
-
         models, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task([hubert], suffix="")
         hubert_model = models[0]
         hubert_model = hubert_model.to(self.device)
@@ -105,13 +89,12 @@ class RVC:
             hubert_model = hubert_model.float()
         hubert_model.eval()
         self.model = hubert_model
-
         self.net_g: nn.Module
         self.net_g, cpt = get_synthesizer(self.pth_path, self.device)
         self.tgt_sr = cpt["config"][-1]
         cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]
         self.if_f0 = cpt.get("f0", 1)
-        self.version = cpt.get("version", "v1")
+        self.version = cpt.get("version", "v2")
         if self.is_half:
             self.net_g = self.net_g.half()
         else:
@@ -211,6 +194,7 @@ class RVC:
         return infered_audio.squeeze()
 
 
+@dataclass
 class Params:
     device: str  # cuda:0
     pth_path: str  # 生成器模型路径
@@ -226,30 +210,26 @@ class Params:
     I_noise_reduce: bool  # 输入降噪
     O_noise_reduce: bool  # 输出降噪
     use_pv: bool  # 启用相位声码器 | default = False
-    samplerate: int  # 模型对应的输入数据的采样率 16000
+    # samplerate: int  # 模型对应的输入数据的采样率 16000
     channels: int  # 设置对应的通道数，对于对通道处理的方式是对多个通道取平均值
 
 
-def inference(indata: np.ndarray, params: Params, rvc: "RVC"):
-    zc = params.samplerate // 100
-    block_frame = int(np.round(params.block_time * params.samplerate / zc)) * zc
+def inference(indata: np.ndarray, params: Params, rvc: RVC):
+    samplerate = rvc.tgt_sr
+    zc = samplerate // 100
+    block_frame = int(np.round(params.block_time * samplerate / zc)) * zc
+
     block_frame_16k = 160 * block_frame // zc
-    crossfade_frame = int(np.round(params.crossfade_time * params.samplerate / zc)) * zc
+    crossfade_frame = int(np.round(params.crossfade_time * samplerate / zc)) * zc
     sola_buffer_frame = min(crossfade_frame, 4 * zc)
     sola_search_frame = zc
-    extra_frame = int(np.round(params.extra_time * params.samplerate / zc)) * zc
+    extra_frame = int(np.round(params.extra_time * samplerate / zc)) * zc
     input_wav: torch.Tensor = torch.zeros(extra_frame + crossfade_frame + sola_search_frame + block_frame,
                                           device=params.device, dtype=torch.float32)
     input_wav_denoise: torch.Tensor = input_wav.clone()
-    input_wav_res: torch.Tensor = torch.zeros(
-        160 * input_wav.shape[0] // zc,
-        device=params.device,
-        dtype=torch.float32,
-    )
+    input_wav_res: torch.Tensor = torch.zeros(160 * input_wav.shape[0] // zc, device=params.device, dtype=torch.float32)
     rms_buffer: np.ndarray = np.zeros(4 * zc, dtype="float32")
-    sola_buffer: torch.Tensor = torch.zeros(
-        sola_buffer_frame, device=params.device, dtype=torch.float32
-    )
+    sola_buffer: torch.Tensor = torch.zeros(sola_buffer_frame, device=params.device, dtype=torch.float32)
     nr_buffer: torch.Tensor = sola_buffer.clone()
     output_buffer: torch.Tensor = input_wav.clone()
     skip_head = extra_frame // zc
@@ -258,40 +238,26 @@ def inference(indata: np.ndarray, params: Params, rvc: "RVC"):
         0.5 * np.pi * torch.linspace(0.0, 1.0, steps=sola_buffer_frame, device=params.device,
                                      dtype=torch.float32)) ** 2)
     fade_out_window: torch.Tensor = 1 - fade_in_window
-    resampler = Resample(
-        orig_freq=params.samplerate,
-        new_freq=16000,
-        dtype=torch.float32,
-    ).to(params.device)
-    if rvc.tgt_sr != params.samplerate:
-        resampler2 = Resample(
-            orig_freq=rvc.tgt_sr,
-            new_freq=params.samplerate,
-            dtype=torch.float32,
-        ).to(params.device)
+    resampler = Resample(orig_freq=samplerate, new_freq=16000, dtype=torch.float32).to(params.device)
+    if rvc.tgt_sr != samplerate:
+        resampler2 = Resample(orig_freq=rvc.tgt_sr, new_freq=samplerate, dtype=torch.float32).to(params.device)
     else:
         resampler2 = None
-    tg = TorchGate(sr=params.samplerate, n_fft=4 * zc, prop_decrease=0.9).to(params.device)
+    tg = TorchGate(sr=samplerate, n_fft=4 * zc, prop_decrease=0.9).to(params.device)
     # -----------------------------------------start voice conversion--------------------------------------------
     indata = librosa.to_mono(indata.T)
     if params.threshold > -60:
         indata = np.append(rms_buffer, indata)
-        rms = librosa.feature.rms(
-            y=indata, frame_length=4 * zc, hop_length=zc
-        )[:, 2:]
+        rms = librosa.feature.rms(y=indata, frame_length=4 * zc, hop_length=zc)[:, 2:]
         rms_buffer[:] = indata[-4 * zc:]
         indata = indata[2 * zc - zc // 2:]
-        db_threhold = (
-                librosa.amplitude_to_db(rms, ref=1.0)[0] < params.threshold
-        )
-        for i in range(db_threhold.shape[0]):
-            if db_threhold[i]:
-                indata[i * zc: (i + 1) * zc] = 0
+        db_threshold = (librosa.amplitude_to_db(rms, ref=1.0)[0] < params.threshold)
+        for i in range(db_threshold.shape[0]):
+            if db_threshold[i]:
+                indata[i * zc:(i + 1) * zc] = 0
         indata = indata[zc // 2:]
-    input_wav[: -block_frame] = input_wav[block_frame:].clone()
-    input_wav[-indata.shape[0]:] = torch.from_numpy(indata).to(
-        params.device
-    )
+    input_wav[:-block_frame] = input_wav[block_frame:].clone()
+    input_wav[-indata.shape[0]:] = torch.from_numpy(indata).to(params.device)
     input_wav_res[: -block_frame_16k] = input_wav_res[block_frame_16k:].clone()
     # input noise reduction and resampling
     if params.I_noise_reduce:
@@ -333,7 +299,7 @@ def inference(indata: np.ndarray, params: Params, rvc: "RVC"):
             align_corners=True,
         )[0, 0, :-1]
         rms2 = librosa.feature.rms(
-            y=infer_wav[:].cpu().numpy(),
+            y=infer_wav[:].detach().cpu().numpy(),
             frame_length=4 * zc,
             hop_length=zc,
         )
@@ -345,35 +311,54 @@ def inference(indata: np.ndarray, params: Params, rvc: "RVC"):
             align_corners=True,
         )[0, 0, :-1]
         rms2 = torch.max(rms2, torch.zeros_like(rms2) + 1e-3)
-        infer_wav *= torch.pow(
-            rms1 / rms2, torch.tensor(1 - params.rms_mix_rate)
-        )
+        infer_wav *= torch.pow(rms1 / rms2, torch.tensor(1 - params.rms_mix_rate))
     # SOLA algorithm from https://github.com/yxlllc/DDSP-SVC
-    conv_input = infer_wav[
-                 None, None, : sola_buffer_frame + sola_search_frame
-                 ]
+    conv_input = infer_wav[None, None, :sola_buffer_frame + sola_search_frame]
     cor_nom = F.conv1d(conv_input, sola_buffer[None, None, :])
-    cor_den = torch.sqrt(
-        F.conv1d(
-            conv_input ** 2,
-            torch.ones(1, 1, sola_buffer_frame, device=params.device),
-        )
-        + 1e-8
-    )
-    if sys.platform == "darwin":
-        _, sola_offset = torch.max(cor_nom[0, 0] / cor_den[0, 0])
-        sola_offset = sola_offset.item()
-    else:
-        sola_offset = torch.argmax(cor_nom[0, 0] / cor_den[0, 0])
+    cor_den = torch.sqrt(F.conv1d(conv_input ** 2, torch.ones(1, 1, sola_buffer_frame, device=params.device), ) + 1e-8)
+    sola_offset = torch.argmax(cor_nom[0, 0] / cor_den[0, 0])
     infer_wav = infer_wav[sola_offset:]
-    if "privateuseone" in str(params.device) or not params.use_pv:
-        infer_wav[: sola_buffer_frame] *= fade_in_window
-        infer_wav[: sola_buffer_frame] += (
-                sola_buffer * fade_out_window
-        )
-    else:
-        infer_wav[: sola_buffer_frame] = phase_vocoder(sola_buffer, infer_wav[: sola_buffer_frame], fade_out_window,
-                                                       fade_in_window)
+    infer_wav[:sola_buffer_frame] = phase_vocoder(sola_buffer, infer_wav[:sola_buffer_frame],
+                                                  fade_out_window, fade_in_window)
     sola_buffer[:] = infer_wav[block_frame:block_frame + sola_buffer_frame]
     outdata = infer_wav[:block_frame].repeat(params.channels, 1).t().cpu().numpy()
     return outdata
+
+
+if __name__ == '__main__':
+    args = Params(device="cuda:0",
+                  pth_path="data/model/Maaident1.pth",
+                  threshold=-60,
+                  pitch=13,
+                  formant=0.0,
+                  index_rate=0.0,
+                  rms_mix_rate=1.,
+                  f0method="rmvpe",
+                  block_time=0.15,
+                  crossfade_time=0.01,
+                  extra_time=2.,
+                  I_noise_reduce=False,
+                  O_noise_reduce=False,
+                  use_pv=False,
+                  channels=1)
+    config = Config()
+    with torch.no_grad():
+        rvc = RVC(args.pitch, args.formant, args.pth_path, config)
+        target_sr = rvc.tgt_sr
+
+        zc = target_sr // 100
+        block_frame = int(np.round(args.block_time * target_sr / zc)) * zc
+
+        audio_data, src_sr = librosa.load("data/test.wav", sr=rvc.tgt_sr)
+        res = np.zeros((0,), dtype=np.float32)
+        for start in range(0, audio_data.shape[0], block_frame):
+            start -= block_frame
+            start = max(0, start)
+            indata = audio_data[start:start + block_frame]
+            print("indata", len(indata))
+            if len(indata) != block_frame:
+                break
+            audio_out = inference(indata, args, rvc).squeeze()
+            print("res", len(audio_out))
+            res = np.concatenate((res, audio_out), axis=0)
+        soundfile.write("data/output/test.wav", res, target_sr)
