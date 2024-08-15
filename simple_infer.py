@@ -64,7 +64,7 @@ class Params:
     channels: int  # 设置对应的通道数，对于对通道处理的方式是对多个通道取平均值
 
 
-def preprocess(indata: np.ndarray, params: Params, rvc: "RVC"):
+def inference(indata: np.ndarray, params: Params, rvc: "RVC"):
     zc = params.samplerate // 100
     block_frame = int(np.round(params.block_time * params.samplerate / zc)) * zc
     block_frame_16k = 160 * block_frame // zc
