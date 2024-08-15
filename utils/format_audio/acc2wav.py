@@ -1,6 +1,7 @@
 import os
 from pydub import AudioSegment
 
+
 def convert_aac_to_wav(folder_path):
     # 遍历文件夹中的所有文件
     for filename in os.listdir(folder_path):
@@ -16,6 +17,7 @@ def convert_aac_to_wav(folder_path):
             os.remove(file_path)
             print(f"Converted {filename} to WAV.")
 
+
 # 指定你的文件夹路径
-folder_path = r'F:\Datasets\RVC\Feisang\origin'
+folder_path = r"F:\Datasets\RVC\Feisang\origin"
 convert_aac_to_wav(folder_path)
