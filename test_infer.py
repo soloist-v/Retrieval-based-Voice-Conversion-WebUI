@@ -5,7 +5,7 @@ import torch
 
 from infer.lib.audio import load_audio
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from configs.config import Config
     from infer.lib import rtrvc
 
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     opt_q = None  # multiprocessing.queues.Queue()
     # -------------Config----------------
     config = Config()
-    config.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    config.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     config.is_half = False
     config.use_jit = False
     config.n_cpu = 16

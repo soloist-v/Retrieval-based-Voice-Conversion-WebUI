@@ -65,7 +65,7 @@ faiss.write_index(
 logger.info("Adding...")
 batch_size_add = 8192
 for i in range(0, big_npy.shape[0], batch_size_add):
-    index.add(big_npy[i: i + batch_size_add])
+    index.add(big_npy[i : i + batch_size_add])
 faiss.write_index(
     index, "tools/infer/added_IVF%s_Flat_mi_baseline_src_feat.index" % (n_ivf)
 )

@@ -18,7 +18,7 @@ file_index = "assets/indices/kiki.index"
 hubert_path = "assets/hubert/hubert_base.pt"
 
 config = Config()
-config.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+config.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 config.is_half = False
 config.use_jit = False
 config.n_cpu = 16
@@ -49,7 +49,7 @@ resample_sr = 48000
 rms_mix_rate = 0.25
 protect = 0.33
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     vc = VC(config, rmvpe_path, model_path, hubert_path, 0.33, 0.33)
     for filename in listdir(raw_path):
         input_path = f"{raw_path}/{filename}"

@@ -3,7 +3,7 @@ import torch
 
 from infer.lib.infer_pack.models_onnx import SynthesizerTrnMsNSFsidM
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model_path = r"assets\infer_model\test014.pth"
     save_path = r"test.onnx"
     cfg = yaml.full_load(open("configs/v2/48k.json"))
@@ -33,8 +33,12 @@ if __name__ == '__main__':
     # net_g.construct_spkmixmap() #多角色混合轨道导出
     n = 239
     test_phone = torch.rand(1, n, vec_channels).to(device)  # hidden unit
-    test_phone_lengths = torch.tensor([n]).long().to(device)  # hidden unit 长度（貌似没啥用）
-    test_pitch = torch.randint(size=(1, n), low=5, high=255).to(device)  # 基频（单位赫兹）
+    test_phone_lengths = (
+        torch.tensor([n]).long().to(device)
+    )  # hidden unit 长度（貌似没啥用）
+    test_pitch = torch.randint(size=(1, n), low=5, high=255).to(
+        device
+    )  # 基频（单位赫兹）
     test_pitchf = torch.rand(1, n).to(device)  # nsf基频
     test_ds = torch.LongTensor([0]).to(device)  # 说话人ID
     test_rnd = torch.rand(1, 192, n).to(device)  # 噪声（加入随机因子）
